@@ -1,0 +1,19 @@
+[workspace]
+authors = ["d-laub <dlaub@ucsd.edu>"]
+channels = ["conda-forge", "bioconda"]
+name = "nf-bcftools-par-merge"
+platforms = ["linux-64"]
+version = "0.1.0"
+
+[tasks]
+merge = "nextflow run merge.nf"
+
+[dependencies]
+nextflow = ">=25.10.2,<26"
+bcftools = ">=1.23,<2"
+polars = ">=1.36.1,<2"
+cyclopts = ">=4.4.3,<5"
+pyarrow = ">=22.0.0,<23"
+
+[pypi-dependencies]
+pyranges1 = ">=1.1.8, <2"
