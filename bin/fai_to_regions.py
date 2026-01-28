@@ -8,7 +8,7 @@ def main(fai: Path, min_windows: int, out: Path, primary_assembly: bool = False)
     import re
 
     import polars as pl
-    import pyranges as pr
+    from natsort import natsorted
 
     if fai.suffix != ".fai":
         raise ValueError(f"Fai file must have .fai suffix: {fai}")
@@ -20,24 +20,36 @@ def main(fai: Path, min_windows: int, out: Path, primary_assembly: bool = False)
         separator="\t",
         has_header=False,
         columns=range(2),
-        new_columns=["Chromosome", "End"],
-    ).with_columns(Start=0)
+        new_columns=["chrom", "end"],
+    ).with_columns(start=0)
 
     if primary_assembly:
         primary_chroms = list(map(str, range(1, 23))) + ["X", "Y", "M", "MT"]
-        chr_prefixed = bed["Chromosome"].str.contains("^chr").any()
+        chr_prefixed = bed["chrom"].str.contains("^chr").any()
         if chr_prefixed:
             primary_chroms = ["chr" + chrom for chrom in primary_chroms]
-        bed = bed.filter(pl.col("Chromosome").is_in(primary_chroms))
+        bed = bed.filter(pl.col("chrom").is_in(primary_chroms))
 
-    total_length = int(bed["End"].sum())
+    total_length = int(bed["end"].sum())
     window_size = -(-total_length // min_windows)
 
+    chroms = natsorted(bed["chrom"].unique())
+
     (
-        pr.PyRanges(bed.to_pandas())
-        .window_ranges(window_size=window_size)
-        .sort_ranges()
-        .to_bed(str(out))
+        bed.with_columns(
+            borders=pl.int_ranges(
+                end=pl.col("end") + 1,
+                step=pl.col("end") // -(-pl.col("end") // window_size),
+            )
+        )
+        .with_columns(
+            start=pl.col("borders").list.head(pl.col("borders").list.len() - 1),
+            end=pl.col("borders").list.slice(1),
+        )
+        .explode("start", "end")
+        .select(pl.col("chrom").cast(pl.Enum(chroms)), "start", "end")
+        .sort("chrom", "start")
+        .write_csv(out, separator="\t", include_header=False)
     )
 
 
